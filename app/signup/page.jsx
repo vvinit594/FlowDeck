@@ -28,13 +28,31 @@ export default function SignupPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      alert('Passwords do not match!');
+      return;
+    }
+    
+    // Store user data in sessionStorage for profile setup
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('signupData', JSON.stringify({
+        name: formData.name,
+        email: formData.email,
+        userType: userType
+      }));
+    }
+    
     // Handle signup logic here
     console.log('Signup data:', formData, 'User type:', userType);
-    // Redirect to appropriate dashboard based on user type
+    
+    // Redirect based on user type
     if (userType === 'client') {
       router.push('/dashboard/client');
     } else {
-      router.push('/dashboard');
+      // Freelancers go to profile setup first
+      router.push('/profile-setup');
     }
   };
 
