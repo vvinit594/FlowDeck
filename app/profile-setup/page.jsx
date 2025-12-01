@@ -21,6 +21,7 @@ import {
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { userAPI } from '@/lib/api';
 
 export default function ProfileSetupPage() {
   const router = useRouter();
@@ -28,6 +29,8 @@ export default function ProfileSetupPage() {
   const [userData, setUserData] = useState({ name: '', email: '', userType: 'freelancer' });
   const [profileImage, setProfileImage] = useState(null);
   const [profileImagePreview, setProfileImagePreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   
   const [profileData, setProfileData] = useState({
     category: '',
@@ -119,15 +122,59 @@ export default function ProfileSetupPage() {
     }
   };
 
-  const handleFinish = () => {
-    // Save profile data
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('profileData', JSON.stringify(profileData));
-      sessionStorage.removeItem('signupData'); // Clean up
+  const handleFinish = async () => {
+    setError('');
+    setLoading(true);
+
+    try {
+      // Prepare profile data for API
+      const apiProfileData = {
+        fullName: userData.name,
+        displayName: userData.name.split(' ')[0], // Use first name as display name
+        professionalTitle: profileData.professionalTitle,
+        category: profileData.category,
+        experienceLevel: profileData.experienceLevel,
+        skills: profileData.skills,
+        bio: profileData.bio,
+        timezone: profileData.timezone,
+        country: profileData.country,
+        avatarUrl: profileImagePreview || '', // Use preview URL or empty string
+        portfolioLinks: profileData.portfolioLinks
+      };
+
+      let response;
+      
+      try {
+        // Try to create profile first
+        response = await userAPI.createProfile(apiProfileData);
+        console.log('Profile created successfully');
+      } catch (createError) {
+        // If profile already exists (409 conflict), update it instead
+        if (createError.message.includes('already exists')) {
+          console.log('Profile exists, updating instead...');
+          response = await userAPI.updateProfile(apiProfileData);
+          console.log('Profile updated successfully');
+        } else {
+          throw createError;
+        }
+      }
+
+      // Clean up session storage
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('signupData');
+      }
+      
+      // Small delay to ensure state updates, then redirect
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 100);
+      
+    } catch (err) {
+      console.error('Profile setup error:', err);
+      setError(err.message || 'Failed to complete profile setup. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    
-    console.log('Profile setup complete:', profileData);
-    router.push('/dashboard');
   };
 
   const isStepValid = () => {
@@ -528,19 +575,32 @@ export default function ProfileSetupPage() {
               </motion.button>
             ) : (
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: loading ? 1 : 1.05 }}
+                whileTap={{ scale: loading ? 1 : 0.95 }}
                 onClick={handleFinish}
-                className="flex items-center gap-2 px-6 py-3 bg-linear-to-r from-green-600 to-emerald-600 rounded-xl font-semibold hover:shadow-lg hover:shadow-green-500/50 transition"
+                disabled={loading}
+                className="flex items-center gap-2 px-6 py-3 bg-linear-to-r from-green-600 to-emerald-600 rounded-xl font-semibold hover:shadow-lg hover:shadow-green-500/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Check className="w-4 h-4" />
-                Complete Setup
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Creating Profile...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Complete Setup
+                  </>
+                )}
               </motion.button>
             )}
           </div>
 
           {/* Skip Option */}
-          {currentStep > 4 && (
+          {currentStep > 4 && !loading && (
             <div className="text-center mt-4">
               <button
                 onClick={handleFinish}

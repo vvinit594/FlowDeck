@@ -5,6 +5,7 @@ import { Mail, Lock, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { authAPI, userAPI } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +14,8 @@ export default function LoginPage() {
     email: '',
     password: ''
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   // Get user type from session storage
   useEffect(() => {
@@ -24,15 +27,42 @@ export default function LoginPage() {
     }
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Handle login logic here
-    console.log('Login data:', formData, 'User type:', userType);
-    // Redirect to appropriate dashboard based on user type
-    if (userType === 'client') {
-      router.push('/dashboard/client');
-    } else {
-      router.push('/dashboard');
+    setError('');
+    setLoading(true);
+
+    try {
+      // Call backend API
+      const response = await authAPI.login(formData.email, formData.password);
+
+      if (response.success) {
+        // Get user profile to check completion status
+        const userData = await userAPI.getMe();
+        
+        if (userData.success) {
+          const user = userData.data;
+          const profile = user.profile;
+
+          // Redirect based on user type and profile completion
+          if (user.userType === 'client') {
+            router.push('/dashboard/client');
+          } else {
+            // Check if profile is completed
+            if (profile && profile.completedAt) {
+              router.push('/dashboard');
+            } else {
+              // Redirect to profile setup if not completed
+              router.push('/profile-setup');
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(err.message || 'Invalid email or password. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -81,6 +111,17 @@ export default function LoginPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm"
+              >
+                {error}
+              </motion.div>
+            )}
+
             {/* Email */}
             <div>
               <label className="block text-sm font-medium mb-2">Email Address</label>
@@ -93,7 +134,8 @@ export default function LoginPage() {
                   onChange={handleChange}
                   placeholder="you@example.com"
                   required
-                  className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-indigo-500 transition"
+                  disabled={loading}
+                  className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -134,13 +176,26 @@ export default function LoginPage() {
 
             {/* Submit Button */}
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: loading ? 1 : 1.02 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
               type="submit"
-              className="w-full py-3 bg-linear-to-r from-indigo-600 to-purple-600 rounded-xl font-semibold flex items-center justify-center gap-2 glow"
+              disabled={loading}
+              className="w-full py-3 px-6 bg-linear-to-r from-indigo-600 to-purple-600 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Sign In
-              <ArrowRight className="w-5 h-5" />
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Signing In...
+                </>
+              ) : (
+                <>
+                  Sign In
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
             </motion.button>
           </form>
 

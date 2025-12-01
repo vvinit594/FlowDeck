@@ -5,6 +5,7 @@ import { Mail, Lock, User, ArrowRight, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { authAPI } from '@/lib/api';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -15,6 +16,8 @@ export default function SignupPage() {
     password: '',
     confirmPassword: ''
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   // Get user type from session storage
   useEffect(() => {
@@ -26,33 +29,71 @@ export default function SignupPage() {
     }
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match!');
+      setError('Passwords do not match!');
+      return;
+    }
+
+    // Validate password strength
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
+    if (!/[A-Z]/.test(formData.password)) {
+      setError('Password must contain at least one uppercase letter');
+      return;
+    }
+
+    if (!/[a-z]/.test(formData.password)) {
+      setError('Password must contain at least one lowercase letter');
+      return;
+    }
+
+    if (!/[0-9]/.test(formData.password)) {
+      setError('Password must contain at least one number');
       return;
     }
     
-    // Store user data in sessionStorage for profile setup
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('signupData', JSON.stringify({
-        name: formData.name,
-        email: formData.email,
-        userType: userType
-      }));
-    }
-    
-    // Handle signup logic here
-    console.log('Signup data:', formData, 'User type:', userType);
-    
-    // Redirect based on user type
-    if (userType === 'client') {
-      router.push('/dashboard/client');
-    } else {
-      // Freelancers go to profile setup first
-      router.push('/profile-setup');
+    setLoading(true);
+
+    try {
+      // Call backend API
+      const response = await authAPI.signup(
+        formData.email,
+        formData.password,
+        formData.name,
+        userType
+      );
+
+      if (response.success) {
+        // Store user data in sessionStorage for profile setup
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('signupData', JSON.stringify({
+            name: formData.name,
+            email: formData.email,
+            userType: userType
+          }));
+        }
+        
+        // Redirect based on user type
+        if (userType === 'client') {
+          router.push('/dashboard/client');
+        } else {
+          // Freelancers go to profile setup first
+          router.push('/profile-setup');
+        }
+      }
+    } catch (err) {
+      console.error('Signup error:', err);
+      setError(err.message || 'Signup failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -112,7 +153,18 @@ export default function SignupPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Name */}
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm"
+              >
+                {error}
+              </motion.div>
+            )}
+
+            {/* Full Name */}
             <div>
               <label className="block text-sm font-medium mb-2">Full Name</label>
               <div className="relative">
@@ -124,7 +176,8 @@ export default function SignupPage() {
                   onChange={handleChange}
                   placeholder="John Doe"
                   required
-                  className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-indigo-500 transition"
+                  disabled={loading}
+                  className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -198,13 +251,26 @@ export default function SignupPage() {
 
             {/* Submit Button */}
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: loading ? 1 : 1.02 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
               type="submit"
-              className="w-full py-3 bg-linear-to-r from-indigo-600 to-purple-600 rounded-xl font-semibold flex items-center justify-center gap-2 glow"
+              disabled={loading}
+              className="w-full py-3 px-6 bg-linear-to-r from-indigo-600 to-purple-600 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Create Account
-              <ArrowRight className="w-5 h-5" />
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Creating Account...
+                </>
+              ) : (
+                <>
+                  Create Account
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
             </motion.button>
           </form>
 
